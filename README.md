@@ -135,16 +135,7 @@ This creates `risk_governance.db` with synthetic GRC data: 10 regulatory framewo
 langgraph dev
 ```
 
-This starts the LangGraph development server and opens LangGraph Studio in your browser. The agent appears as **"Risk Assessment Agent"** in the Studio UI.
-
-- API: http://127.0.0.1:2024
-- Studio UI: opens automatically (or visit https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024)
-- API Docs: http://127.0.0.1:2024/docs
-
-> **Note**: If `langgraph dev` can't find project dependencies, install them into the LangGraph CLI environment:
-> ```bash
-> pipx runpip langgraph-cli install -e .
-> ```
+Opens the agent in [LangGraph Studio](#langgraph-studio) with a visual graph view, interactive chat, state inspector, and time-travel debugging. See the [LangGraph Studio](#langgraph-studio) section below for details.
 
 ### Option 2: Interactive Chat (terminal)
 
@@ -320,6 +311,141 @@ Results are visible in the LangSmith **Experiments** tab with model, prompt, and
 All traces are automatically sent to LangSmith when `LANGSMITH_TRACING=true` is set. Traces include the full orchestrator + subagent hierarchy — you can see each subagent's tool calls (SQL queries, web searches) nested under the parent trace.
 
 View traces at: https://smith.langchain.com (under the `risk-assessment-agent` project)
+
+## LangGraph Studio
+
+[LangGraph Studio](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/) is a desktop IDE for building, debugging, and visualizing LangGraph agents. It connects to the development server started by `langgraph dev` and gives you:
+
+- **Visual graph view** — see nodes, edges, and real-time execution flow through the orchestrator and subagents
+- **Interactive chat** — test the agent with conversation history and thread management
+- **State inspector** — inspect agent state, messages, and tool calls at every step
+- **Time travel** — rewind to any checkpoint and replay from that point with different inputs
+
+### Running in Studio
+
+```bash
+langgraph dev
+```
+
+This starts the LangGraph development server and opens Studio in your browser. The agent appears as **"Risk Assessment Agent"** in the Studio UI.
+
+- **Studio UI**: opens automatically (or visit the URL printed in the terminal)
+- **API**: http://127.0.0.1:2024
+- **API Docs**: http://127.0.0.1:2024/docs
+
+To start the server without opening the browser:
+
+```bash
+langgraph dev --no-browser
+```
+
+> **Note**: If `langgraph dev` can't find project dependencies, install them into the LangGraph CLI environment:
+> ```bash
+> pipx runpip langgraph-cli install -e .
+> ```
+
+### Studio Configuration
+
+The agent is configured for Studio via `langgraph.json`:
+
+```json
+{
+  "graphs": {
+    "Risk Assessment Agent": "./agent.py:agent"
+  },
+  "env": ".env",
+  "dependencies": ["."]
+}
+```
+
+- `graphs` — maps graph names to Python module paths (`module:attribute`)
+- `env` — points to the `.env` file for API keys
+- `dependencies` — Python packages to install (`.` installs this project)
+
+## Deploying
+
+### LangGraph Platform
+
+[LangGraph Platform](https://langchain-ai.github.io/langgraph/concepts/langgraph_platform/) provides infrastructure for deploying LangGraph agents as production APIs with built-in persistence, streaming, and monitoring.
+
+#### Option A: Deploy via LangSmith UI
+
+The simplest path — connect your GitHub repo and deploy from the LangSmith dashboard.
+
+1. Push your repo to GitHub
+2. Go to [smith.langchain.com](https://smith.langchain.com) → **Deployments** → **+ New Deployment**
+3. Select your repo and branch
+4. Set environment variables (same as your `.env`)
+5. Deploy
+
+The platform reads `langgraph.json` to configure the deployment automatically.
+
+#### Option B: Deploy via CLI
+
+```bash
+# Build a Docker image from langgraph.json
+langgraph build -t my-risk-agent
+
+# Test locally
+docker run -p 8123:8000 --env-file .env my-risk-agent
+
+# Deploy to LangGraph Cloud
+langgraph deploy
+```
+
+#### Option C: Self-hosted
+
+Run the Docker image on your own infrastructure:
+
+```bash
+# Build
+langgraph build -t my-risk-agent
+
+# Run with your preferred container orchestration
+docker run -p 8123:8000 \
+  -e GOOGLE_API_KEY=... \
+  -e TAVILY_API_KEY=... \
+  -e LANGSMITH_API_KEY=... \
+  my-risk-agent
+```
+
+### Connecting to a deployed agent
+
+Once deployed, interact with the agent via the [LangGraph SDK](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/):
+
+```python
+from langgraph_sdk import get_client
+
+client = get_client(url="YOUR_DEPLOYMENT_URL")
+
+# Create a thread
+thread = await client.threads.create()
+
+# Send a message
+result = await client.runs.wait(
+    thread["thread_id"],
+    assistant_id="Risk Assessment Agent",
+    input={"messages": [{"role": "user", "content": "I want to build an AI credit scoring system for EU lending decisions."}]},
+)
+```
+
+Or via REST API:
+
+```bash
+# Create a thread
+curl -s YOUR_DEPLOYMENT_URL/threads \
+  -H "Content-Type: application/json" -d '{}'
+
+# Send a message (replace THREAD_ID)
+curl -s "YOUR_DEPLOYMENT_URL/threads/THREAD_ID/runs/wait" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "assistant_id": "Risk Assessment Agent",
+    "input": {
+      "messages": [{"role": "user", "content": "I want to build an AI credit scoring system for EU lending decisions."}]
+    }
+  }'
+```
 
 ## Dependencies
 
